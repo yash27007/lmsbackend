@@ -1,0 +1,159 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  password     String?
+  googleId     String?   @unique
+  firstName    String
+  lastName     String
+  institution  String?
+  role         UserRole
+  verified     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  student      Student?
+  faculty      Faculty?
+  admin        Admin?
+
+  @@index([email, role])
+}
+
+enum UserRole {
+  STUDENT
+  FACULTY
+  ADMIN
+}
+
+model Student {
+  id           Int            @id @default(autoincrement())
+  userId       Int            @unique
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollments  Enrollment[]
+  courseAccess CourseAccess[]
+
+  @@index([userId])
+}
+
+model Faculty {
+  id      Int      @id @default(autoincrement())
+  userId  Int      @unique
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courses Course[]
+
+  @@index([userId])
+}
+
+model Admin {
+  id      Int      @id @default(autoincrement())
+  userId  Int      @unique
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courses Course[]
+
+  @@index([userId])
+}
+
+model Course {
+  id                 Int            @id @default(autoincrement())
+  name               String
+  description        String?
+  duration           Int            // in minutes
+  price              Float
+  discountedPrice    Float?
+  discountPercentage Float?
+  discountValidUntil DateTime?
+  accessDuration     Int            @default(365) // in days, default 1 year
+  scormVersion       ScormVersion
+  status             CourseStatus   @default(DRAFT)
+  scormUrl           String
+  manifestUrl        String
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  facultyId          Int?
+  faculty            Faculty?       @relation(fields: [facultyId], references: [id])
+  adminId            Int?
+  admin              Admin?         @relation(fields: [adminId], references: [id])
+  enrollments        Enrollment[]
+  courseAccess       CourseAccess[]
+
+  @@index([facultyId, adminId])
+  @@index([createdAt, updatedAt])
+  @@index([price, discountedPrice])
+}
+
+enum ScormVersion {
+  SCORM_1_2
+  SCORM_2004_3RD_EDITION
+  SCORM_2004_4TH_EDITION
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Enrollment {
+  id               Int              @id @default(autoincrement())
+  courseId         Int
+  course           Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentId        Int
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  paid             Boolean          @default(false)
+  completionStatus Float?
+  score            Float?
+  status           EnrollmentStatus @default(ACTIVE)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  payment          Payment?
+
+  @@unique([courseId, studentId])
+  @@index([paid, createdAt])
+}
+
+enum EnrollmentStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+model CourseAccess {
+  id        Int       @id @default(autoincrement())
+  studentId Int
+  student   Student   @relation(fields: [studentId], references: [id])
+  courseId  Int
+  course    Course    @relation(fields: [courseId], references: [id])
+  expiresAt DateTime? // Null means lifetime access
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([studentId, courseId])
+  @@index([expiresAt])
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  amount        Float
+  status        PaymentStatus
+  paymentMethod String?       // Optional to track the method used for payment, CARD, CASH, UPI etc
+  transactionId String?       // Optional external transaction reference
+  enrollmentId  Int           @unique
+  enrollment    Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([status, createdAt])
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
